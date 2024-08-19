@@ -74,7 +74,7 @@ def status(update: Update, context: CallbackContext) -> None:
 def help(update: Update, context: CallbackContext) -> None:
     update.message.reply_text('''/start_server: Starts the server
 /stop_server: stops the server
-/info: gives the server host ipppp
+/info: gives the server host ip
 /status: gives the status of the server
                               
 remember: give it a few mins to start the mc server as it needs to start the server then the mc world.''')
