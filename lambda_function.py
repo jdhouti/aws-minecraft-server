@@ -1,7 +1,8 @@
-import json
-import boto3
 from telegram import Update, Bot
 from telegram.ext import Dispatcher, CommandHandler, CallbackContext
+from minecraft_aws_client import MinecraftAwsClient, ServerStatus
+import json
+import boto3
 
 REGION_NAME = "us-east-1"
 TELEGRAM_SECRET_NAME = "prod/telegram/bot_token"
@@ -9,10 +10,6 @@ TELEGRAM_SECRET_USERS = "prod/telegram/users"
 session = boto3.session.Session()
 secrets_client = session.client(
     service_name='secretsmanager',
-    region_name=REGION_NAME
-)
-ec2_client = session.client(
-    'ec2',
     region_name=REGION_NAME
 )
 
@@ -43,30 +40,35 @@ bot = Bot(token=telegram_bot_token)
 #LOOK INTO WHAT THE PARAMS OF THESE FUNCTIONS DO!
 def start_instance(update: Update, context: CallbackContext) -> None:
     if update.message.chat.username.lower() in get_admins():
-        ec2_client.start_instances(InstanceIds=[INSTANCE_ID])
-        update.message.reply_text("Starting server")
+        begin_state, end_state = minecraft_aws_client.start_server()
+
+        if begin_state == ServerStatus.RUNNING:
+            update.message.reply_text("Server is already on")
+        else:
+            update.message.reply_text("Starting server")
     else:
-        update.message.reply_text("Unauthorized to start the server")
+        update.message.reply_text("Unauthorized command")
 
 def stop_instance(update: Update, context: CallbackContext) -> None:
+    # Check if instance is stopped first
+    
     if update.message.chat.username.lower() in get_admins():
-        ec2_client.stop_instances(InstanceIds=[INSTANCE_ID])
-        update.message.reply_text("Stopping server")
+        begin_state, end_state = minecraft_aws_client.stop_server()
+
+        if begin_state == end_state:
+            update.message.reply_text("Did nothing, server already stopped")
+        else:
+            update.message.reply_text("Stopped server")
     else:
-        update.message.reply_text("Unauthorized to stop the server")
+        update.message.reply_text("Unauthorized command")
 
 
 def info(update: Update, context: CallbackContext) -> None:
     update.message.reply_text("The server host is:\n34.234.0.133:25565")
     
 
-
 def status(update: Update, context: CallbackContext) -> None:
-    response = ec2_client.describe_instance_status(InstanceIds=[INSTANCE_ID])
-    
-    # update.message.reply_text(response)
-
-    if len(response['InstanceStatuses']) != 0:
+    if minecraft_aws_client.minecraft_server_is_running():
         update.message.reply_text("Running! Connect to the server\n34.234.0.133:25565\nIf u just turned the server on, give it a few mins")
     else:
         update.message.reply_text("It's off")
