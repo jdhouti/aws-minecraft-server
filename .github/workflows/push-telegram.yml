@@ -1,21 +1,25 @@
-name: telegram message
+name: Send Notification Telegram Message
+
 on:
   push:
     branches:
       - main
+    paths:
+      - '**.py'
 
 jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
     steps:
-      - name: send telegram message on push
+      - name: Send Telegram message on push for python files
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_TO }}
           token: ${{ secrets.TELEGRAM_TOKEN }}
           message: |
-            ${{ github.actor }} deployed a new version to production:
+            [${{ github.actor }}] deployed a new version to production:
+            Time of deployment: github.event.created_at
             Commit message: ${{ github.event.commits[0].message }}
             
             See changes: https://github.com/${{ github.repository }}/commit/${{github.sha}}
