@@ -15,7 +15,7 @@ jobs:
           to: ${{ secrets.TELEGRAM_TO }}
           token: ${{ secrets.TELEGRAM_TOKEN }}
           message: |
-            Hey btw, ${{ github.actor }} deployed a commit to production:
+            Yo btw, ${{ github.actor }} deployed a commit to production:
             Commit message: ${{ github.event.commits[0].message }}
             
             See changes: https://github.com/${{ github.repository }}/commit/${{github.sha}}
