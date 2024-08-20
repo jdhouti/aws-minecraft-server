@@ -4,36 +4,14 @@ from minecraft_aws_client import MinecraftAwsClient, ServerStatus
 import json
 import boto3
 
-REGION_NAME = "us-east-1"
 TELEGRAM_SECRET_NAME = "prod/telegram/bot_token"
 TELEGRAM_SECRET_USERS = "prod/telegram/users"
-session = boto3.session.Session()
-secrets_client = session.client(
-    service_name='secretsmanager',
-    region_name=REGION_NAME
-)
 
-def get_secret(secret_name):
-    try:
-        response = secrets_client.get_secret_value(SecretId=secret_name)
-        
-        # Depending on the secret type, it could be a string or binary
-        if 'SecretString' in response:
-            secret = response['SecretString']
-        else:
-            secret = base64.b64decode(response['SecretBinary'])
-
-        # If it's a JSON, parse it
-        secret_dict = json.loads(secret)
-        return secret_dict
-
-    except Exception as e:
-        print(f"Error retrieving secret: {e}")
-        return None
+minecraft_aws_client = MinecraftAwsClient()
 
 INSTANCE_ID = 'i-0a70e43874886f1fe'
 
-telegram_bot_token = get_secret(TELEGRAM_SECRET_NAME)['TELEGRAM_BOT_TOKEN']
+telegram_bot_token = minecraft_aws_client.get_secret(TELEGRAM_SECRET_NAME)['TELEGRAM_BOT_TOKEN']
 bot = Bot(token=telegram_bot_token)
 
 
@@ -43,15 +21,13 @@ def start_instance(update: Update, context: CallbackContext) -> None:
         begin_state, end_state = minecraft_aws_client.start_server()
 
         if begin_state == ServerStatus.RUNNING:
-            update.message.reply_text("Server is already on")
+            update.message.reply_text("Did nothing, server is already on")
         else:
             update.message.reply_text("Starting server")
     else:
         update.message.reply_text("Unauthorized command")
 
 def stop_instance(update: Update, context: CallbackContext) -> None:
-    # Check if instance is stopped first
-    
     if update.message.chat.username.lower() in get_admins():
         begin_state, end_state = minecraft_aws_client.stop_server()
 
@@ -86,7 +62,7 @@ def add_user(update: Update, context: CallbackContext) -> None:
 
 
 def get_users_list(list_name):
-    users_raw = get_secret(TELEGRAM_SECRET_USERS)[list_name]
+    users_raw = minecraft_aws_client.get_secret(TELEGRAM_SECRET_USERS)[list_name]
     users = users_raw.split(",")
 
     return set(users)

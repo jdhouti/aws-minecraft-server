@@ -1,6 +1,7 @@
 from enum import Enum
-from typing import Tuple
+from typing import Tuple, Optional
 
+import json
 import boto3
 
 class ServerStatus(Enum):
@@ -13,17 +14,20 @@ class ServerStatus(Enum):
     UNKNOWN = 7
 
 class MinecraftAwsClient:
-    def __init__(self, aws_access_key_id=None, aws_secret_access_key=None):
+    def __init__(self, region=None, aws_access_key_id=None, aws_secret_access_key=None):
         if bool(aws_access_key_id) != bool(aws_secret_access_key):
             raise ValueError("Both aws_access_key_id and aws_secret_access_key must be provided together.")
 
-        self._REGION = "us-east-1"
+        self._REGION = region if region else "us-east-1"
         self._INSTANCE_ID = "i-0a70e43874886f1fe"
 
-        self._session = self._get_session(
-            aws_access_key_id=aws_access_key_id,
-            aws_secret_access_key=aws_secret_access_key
-        )
+        self._session = None
+        # This is for local set up and testing
+        if aws_access_key_id and aws_secret_access_key:
+            self._session = self._get_session(
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=aws_secret_access_key
+            )
         self.__secrets_client = None
         self.__ec2_client = None
 
@@ -61,13 +65,38 @@ class MinecraftAwsClient:
         
         return self.__ec2_client
 
-    def _translate_status_from_aws(self, raw_status) -> ServerStatus:
+    def _translate_instance_status_from_aws(self, raw_status) -> ServerStatus:
         instance_state = raw_status.replace('-', '_').upper()
 
         try:
             return ServerStatus[instance_state]
         except:
             return ServerStatus.UNKNOWN
+
+    def get_region(self):
+        return self._REGION
+
+    def get_secret(self, secret_name) -> Optional[dict]:
+        """
+        Given a secret name, try to return to return its encrypted value.
+        If the secret does not exist, return None
+        """
+        try:
+            response = self._get_secrets_client().get_secret_value(SecretId=secret_name)
+            
+            # Depending on the secret type, it could be a string or binary
+            if 'SecretString' in response:
+                secret = response['SecretString']
+            else:
+                secret = base64.b64decode(response['SecretBinary'])
+
+            # If it's a JSON, parse it
+            secret_dict = json.loads(secret)
+            return secret_dict
+
+        except Exception as e:
+            print(f"Error retrieving secret: {e}")
+            return None
 
     def start_server(self) -> Tuple[ServerStatus, ServerStatus]:
         """
@@ -78,9 +107,9 @@ class MinecraftAwsClient:
         response = self._get_ec2_client().start_instances(InstanceIds=[self._INSTANCE_ID])
 
         begin_state_raw = response['StartingInstances'][0]['PreviousState']['Name']
-        begin_state = self._translate_status_from_aws(begin_state_raw)
+        begin_state = self._translate_instance_status_from_aws(begin_state_raw)
         end_state_raw = response['StartingInstances'][0]['CurrentState']['Name']
-        end_state = self._translate_status_from_aws(end_state_raw)
+        end_state = self._translate_instance_status_from_aws(end_state_raw)
 
         return begin_state, end_state
 
@@ -94,9 +123,9 @@ class MinecraftAwsClient:
 
         print(response)
         begin_state_raw = response['StoppingInstances'][0]['PreviousState']['Name']
-        begin_state = self._translate_status_from_aws(begin_state_raw)
+        begin_state = self._translate_instance_status_from_aws(begin_state_raw)
         end_state_raw = response['StoppingInstances'][0]['CurrentState']['Name']
-        end_state = self._translate_status_from_aws(end_state_raw)
+        end_state = self._translate_instance_status_from_aws(end_state_raw)
 
         return begin_state, end_state
 
@@ -112,7 +141,7 @@ class MinecraftAwsClient:
         
         instance_state_raw = response['InstanceStatuses'][0]['InstanceState']['Name']
 
-        return self._translate_status_from_aws(instance_state_raw)
+        return self._translate_instance_status_from_aws(instance_state_raw)
 
     def minecraft_server_is_running(self) -> bool:
         """
